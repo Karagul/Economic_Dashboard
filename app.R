@@ -5,7 +5,7 @@ library(stringr)
 library(tidyr)
 
 input_dataset <- function(dataset) {
-  db <- read.csv(dataset, header = TRUE, sep = ",") %>%
+  db <- read.csv(paste0("data/", dataset), header = TRUE, sep = ",") %>%
     gather(year, value, -c(Country.Name, Country.Code, Indicator.Name, Indicator.Code)) %>%
     mutate(year = as.numeric(str_extract(year, "[0-9]+"))) %>%
     na.omit()
