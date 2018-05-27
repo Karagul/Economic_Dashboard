@@ -4,74 +4,72 @@ library(dplyr)
 library(stringr)
 library(tidyr)
 
-data_setting <- function(a){
-  x <- a %>%
-    read.csv(header = TRUE, sep = ",") %>%
-    gather(year, value, -c(Country.Code, Country.Name, Indicator.Name, Indicator.Code)) %>%
+input_dataset <- function(dataset) {
+  db <- read.csv(dataset, header = TRUE, sep = ",") %>%
+    gather(year, value, -c(Country.Name, Country.Code, Indicator.Name, Indicator.Code)) %>%
     mutate(year = as.numeric(str_extract(year, "[0-9]+"))) %>%
-    filter(Country.Code == "DOM")
+    na.omit()
 }
 
-le <- data_setting("Life Expectancy.csv")
-gdp <- data_setting("GDP.csv")
+gdp <- input_dataset("GDP.csv")
+le <- input_dataset("Life Expectancy.csv")
 
 ui <- fluidPage(
   
-  titlePanel("Gross Domestic Product (GDP)"),
+  titlePanel("Economic Dashboard"),
   
   sidebarLayout(
     sidebarPanel(
+      radioButtons("var_select", "Select Variable:",
+                   list("GDP Constant USD 2010" = "gdp_usd",
+                        "Life Expectancy" = "ble")),
       sliderInput("year_range",
-                  "1990-2017:",
+                  "1960-2017:",
                   min = 1960,
                   max = 2017,
-                  value = c(1960,2017)
-      )
-    ),
+                  value = c(1990,2017)),
+      selectInput("country", "Select country:",
+                  choices = gdp$Country.Name,
+                  selected = 1)),
     
     mainPanel(
-      plotOutput("main_plot",
-                 height = "500px",
-                 hover = "plot_hover"),
-      verbatimTextOutput("info")
+      plotOutput("distPlot"),
+      dataTableOutput("mytable")
     )
   )
 )
 
 server <- function(input, output) {
   
-  output$main_plot <- renderPlot({
-    
+  data <- reactive({  
+    var_selected <- switch(input$var_select,
+                           gdp_usd = gdp,
+                           ble = le,
+                           gdp)
     x <- input$year_range
     
-    hp <- nearPoints(gdp, input$plot_hover, xvar = "year", yvar = "value")
-    point <- hp$year
-    
-    if (is.null(point)) { point <- 2017.00}
-    
-    gdp_sub <- gdp[gdp$year == point, ]
-    gdp_sub$value <- ifelse(gdp_sub$year == point, gdp_sub$value, "")
-    
-    #Plotting
-    p <- gdp %>%
-      filter(year >= min(x), year <= max(x))%>%
-      ggplot(aes(x = year, y = value)) +
-      geom_line(linetype = "dashed",
-                color = "blue",
-                size = 0.75) +
-      geom_point() +
-      labs(title = "GDP - Dominican Republic",
-           subtitle = "Constant USD 2010",
-           y = "GDP, constant USD 2010",
-           x = "Year")+ 
-      geom_text(aes(label = value), size = 5, data = gdp_sub)
-    p
+    var_selected <- filter(var_selected, Country.Name == input$country, year >= min(x), year <= max(x))
   })
   
-  output$info <- renderPrint({
-    #hp <- nearPoints(gdp, input$plot_hover, xvar = "year", yvar = "value")
-    #hp$value
+  output$distPlot <- renderPlot({
+    ptitle <- ifelse(input$var_select == "ble","Life Expectancy","GDP in Constant 2010 USD")
+    
+    p <- data() %>%
+      ggplot(aes(x = year, y = value)) +
+      geom_point() +
+      geom_line() +
+      labs(title = ptitle,
+           subtitle = input$country,
+           x = "Years",
+           y = ptitle,
+           caption = "Based on data from the World Bank")
+    print(p)
+  })
+  
+  output$mytable = renderDataTable({
+    data()
   })
 }
 
 shinyApp(ui = ui, server = server)
+
